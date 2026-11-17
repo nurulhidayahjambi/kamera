@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Halaman ini tidak dapat mengirim data ke internet (connect-src 'none'); foto hanya dikembalikan ke aplikasi Presensi NHJ yang membukanya. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; media-src blob: mediastream:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Kamera Presensi NHJ</title>
+<style>
+  :root { --hijau:#2f6b4f; --latar:#0f1512; --teks:#f4f1ea; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--latar); color:var(--teks); font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  #layar { position:fixed; inset:0; display:flex; flex-direction:column; }
+  #bingkai { position:relative; flex:1; overflow:hidden; background:#000; }
+  video, #hasil { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  video { transform:scaleX(-1); } /* pratinjau seperti cermin, foto yang dikirim tidak dicerminkan */
+  #hasil { display:none; transform:scaleX(-1); }
+  #oval { position:absolute; left:50%; top:44%; width:62vmin; height:80vmin; transform:translate(-50%,-50%); border:3px dashed rgba(255,255,255,.85); border-radius:50%; pointer-events:none; box-shadow:0 0 0 200vmax rgba(0,0,0,.35); }
+  #pesan { position:absolute; left:0; right:0; top:max(14px,env(safe-area-inset-top)); text-align:center; padding:0 16px; font-weight:600; text-shadow:0 1px 3px #000; }
+  #bawah { padding:16px 16px max(18px,env(safe-area-inset-bottom)); display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--latar); }
+  button { font:inherit; border:0; border-radius:999px; cursor:pointer; }
+  #batal { background:transparent; color:var(--teks); padding:12px 8px; min-width:72px; }
+  #jepret { width:76px; height:76px; background:#fff; box-shadow:0 0 0 5px var(--hijau); }
+  #jepret:disabled { opacity:.4; }
+  #kosong { min-width:72px; }
+  #info { position:absolute; left:8px; right:8px; bottom:8px; font-size:12px; opacity:.85; text-shadow:0 1px 2px #000; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div id="layar">
+  <div id="bingkai">
+    <video id="video" playsinline muted autoplay></video>
+    <img id="hasil" alt="">
+    <div id="oval"></div>
+    <div id="pesan">Menyalakan kamera depan…</div>
+    <div id="info"></div>
+  </div>
+  <div id="bawah">
+    <button id="batal" type="button">Batal</button>
+    <button id="jepret" type="button" aria-label="Ambil foto" disabled></button>
+    <span id="kosong"></span>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var t0 = Date.now(), tMuat = Math.round(performance.now()), tKamera = 0;
+  var q = {}; location.hash.replace(/^#/, '').split('&').forEach(function (b) { var p = b.split('='); if (p[0]) q[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || ''); });
+  // Asal yang boleh menerima foto: halaman aplikasi Presensi NHJ (Google Apps Script) saja.
+  var asal = /^https:\/\/[a-z0-9-]+[.-]script\.googleusercontent\.com$/.test(q.asal || '') ? q.asal : '';
+  var pembuka = window.opener && !window.opener.closed ? window.opener : null;
+  var uji = !pembuka || q.uji === '1';
+  var $ = function (id) { return document.getElementById(id); };
+  var video = $('video'), aliran = null, terkirim = false;
+
+  function kirim(isi) {
+    if (!pembuka || !asal) return false;
+    isi.nhj = 'kamera'; isi.v = 1; isi.id = q.id || '';
+    try { pembuka.postMessage(isi, asal); return true; } catch (e) { return false; }
+  }
+  function matikan() { if (aliran) { aliran.getTracks().forEach(function (t) { t.stop(); }); aliran = null; } }
+  function tutup() { matikan(); setTimeout(function () { window.close(); }, 60); }
+  function info(t) { if (uji) $('info').textContent = t; }
+
+  function gagal(kode, teks) {
+    $('pesan').textContent = teks;
+    if (!uji && kirim({ galat: kode })) tutup(); // aplikasi langsung beralih ke kamera HP
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { gagal('tidak_didukung', 'Peramban ini belum mendukung kamera langsung.'); return; }
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+    .then(function (s) {
+      aliran = s; video.srcObject = s;
+      return video.play();
+    })
+    .then(function () {
+      tKamera = Math.round(performance.now());
+      $('pesan').textContent = 'Posisikan wajah di dalam oval';
+      $('jepret').disabled = false;
+      info('Mode uji · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + tKamera + ' ms');
+    })
+    .catch(function (e) {
+      var n = e && e.name;
+      if (n === 'NotAllowedError' || n === 'SecurityError') gagal('izin', 'Izin kamera belum diberikan. Ketuk ikon gembok di alamat, izinkan Kamera, lalu coba lagi.');
+      else if (n === 'NotFoundError' || n === 'OverconstrainedError') gagal('tidak_ada', 'Kamera depan tidak ditemukan.');
+      else gagal('lain', 'Kamera belum dapat dinyalakan (' + (n || 'galat') + ').');
+    });
+
+  $('jepret').addEventListener('click', function () {
+    if (terkirim || !video.videoWidth) return;
+    var tJepret = Math.round(performance.now());
+    var w = video.videoWidth, h = video.videoHeight, lebar = Math.min(960, w), tinggi = Math.round(h * lebar / w);
+    var c = document.createElement('canvas'); c.width = lebar; c.height = tinggi;
+    c.getContext('2d').drawImage(video, 0, 0, lebar, tinggi);
+    var foto = c.toDataURL('image/jpeg', 0.82);
+    $('hasil').src = foto; $('hasil').style.display = 'block'; video.style.display = 'none';
+    matikan();
+    terkirim = true;
+    var ok = kirim({ foto: foto, lebar: lebar, tinggi: tinggi, ms: { muat: tMuat, kamera: tKamera, jepret: tJepret, kirim: Math.round(performance.now()) }, mulai: t0 });
+    if (ok) { $('pesan').textContent = 'Foto terkirim ke aplikasi ✓'; tutup(); }
+    else {
+      $('pesan').textContent = uji ? 'Foto berhasil diambil ✓ (mode uji — tidak dikirim ke mana pun)' : 'Foto belum dapat dikembalikan ke aplikasi. Silakan tutup halaman ini dan absen seperti biasa.';
+      info('Mode uji · halaman siap ' + tMuat + ' ms · kamera menyala ' + tKamera + ' ms · jepret pada ' + tJepret + ' ms · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
+    }
+  });
+
+  $('batal').addEventListener('click', function () { if (!kirim({ batal: true })) { matikan(); $('pesan').textContent = 'Dibatalkan.'; } else tutup(); });
+  window.addEventListener('pagehide', matikan);
+})();
+</script>
+</body>
+</html>
