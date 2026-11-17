@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- Halaman ini tidak dapat mengirim data ke internet (connect-src 'none'); foto hanya dikembalikan ke aplikasi Presensi NHJ yang membukanya. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; media-src blob: mediastream:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; worker-src 'self'; img-src data: blob:; media-src blob: mediastream:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
 <title>Kamera Presensi NHJ</title>
@@ -71,7 +71,7 @@
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { gagal('tidak_didukung', 'Peramban ini belum mendukung kamera langsung.'); return; }
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 960 } }, audio: false })
     .then(function (s) {
       aliran = s; video.srcObject = s;
       return video.play();
@@ -80,7 +80,7 @@
       tKamera = Math.round(performance.now());
       $('pesan').textContent = 'Posisikan wajah di dalam oval';
       $('jepret').disabled = false;
-      info('Mode uji · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + tKamera + ' ms');
+      info('Mode uji v2 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
     })
     .catch(function (e) {
       var n = e && e.name;
@@ -103,12 +103,14 @@
     if (ok) { $('pesan').textContent = 'Foto terkirim ke aplikasi ✓'; tutup(); }
     else {
       $('pesan').textContent = uji ? 'Foto berhasil diambil ✓ (mode uji — tidak dikirim ke mana pun)' : 'Foto belum dapat dikembalikan ke aplikasi. Silakan tutup halaman ini dan absen seperti biasa.';
-      info('Mode uji · halaman siap ' + tMuat + ' ms · kamera menyala ' + tKamera + ' ms · jepret pada ' + tJepret + ' ms · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
+      info('Mode uji v2 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
     }
   });
 
   $('batal').addEventListener('click', function () { if (!kirim({ batal: true })) { matikan(); $('pesan').textContent = 'Dibatalkan.'; } else tutup(); });
   window.addEventListener('pagehide', matikan);
+  // v2: halaman disimpan di HP (service worker) → pembukaan berikutnya tanpa menunggu internet
+  try { if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js'); } catch (e) {}
 })();
 </script>
 </body>
