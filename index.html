@@ -26,6 +26,14 @@
   #jepret:disabled { opacity:.4; }
   #kosong { min-width:72px; }
   #info { position:absolute; left:8px; right:8px; bottom:8px; font-size:12px; opacity:.85; text-shadow:0 1px 2px #000; white-space:pre-wrap; }
+  /* v3: selama kamera belum mengirim gambar, layar tidak tampak macet */
+  #tunggu { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:0 24px; background:#000; }
+  #tunggu.hilang { display:none; }
+  #putar { width:46px; height:46px; border-radius:50%; border:4px solid rgba(255,255,255,.25); border-top-color:#fff; animation:putar .9s linear infinite; }
+  @keyframes putar { to { transform:rotate(360deg); } }
+  #tunggu b { font-size:17px; }
+  #tunggu small { opacity:.8; min-height:1.4em; }
+  #alih { display:none; background:#fff; color:#111; padding:10px 16px; font-weight:600; }
 </style>
 </head>
 <body>
@@ -34,6 +42,7 @@
     <video id="video" playsinline muted autoplay></video>
     <img id="hasil" alt="">
     <div id="oval"></div>
+    <div id="tunggu"><div id="putar" aria-hidden="true"></div><b>Menyalakan kamera depan…</b><small id="tungguKet"></small><button id="alih" type="button">Pakai kamera HP saja</button></div>
     <div id="pesan">Menyalakan kamera depan…</div>
     <div id="info"></div>
   </div>
@@ -65,22 +74,32 @@
   function info(t) { if (uji) $('info').textContent = t; }
 
   function gagal(kode, teks) {
+    clearInterval(tTunggu); $('tunggu').classList.add('hilang');
     $('pesan').textContent = teks;
     if (!uji && kirim({ galat: kode })) tutup(); // aplikasi langsung beralih ke kamera HP
   }
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { gagal('tidak_didukung', 'Peramban ini belum mendukung kamera langsung.'); return; }
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 960 } }, audio: false })
+  // v3: hitungan waktu & jalan keluar bila kamera HP lama menyala (HP dengan memori terbatas)
+  var tTunggu = setInterval(function () {
+    var d = Math.round((Date.now() - t0) / 1000);
+    if (d >= 3) $('tungguKet').textContent = 'Mohon tunggu, HP sedang menyalakan kamera (' + d + ' dtk)…';
+    if (d >= 8 && !uji) $('alih').style.display = 'inline-block';
+  }, 500);
+  $('alih').addEventListener('click', function () { clearInterval(tTunggu); if (kirim({ galat: 'lambat' })) tutup(); });
+  // v3: cukup 640 piksel (foto akhir 480×640) — lebih ringan & lebih cepat menyala di HP dengan memori terbatas
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }, audio: false })
     .then(function (s) {
       aliran = s; video.srcObject = s;
       return video.play();
     })
     .then(function () {
       tKamera = Math.round(performance.now());
+      clearInterval(tTunggu); $('tunggu').classList.add('hilang');
       $('pesan').textContent = 'Posisikan wajah di dalam oval';
       $('jepret').disabled = false;
-      info('Mode uji v2 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
+      info('Mode uji v3 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
     })
     .catch(function (e) {
       var n = e && e.name;
@@ -92,7 +111,7 @@
   $('jepret').addEventListener('click', function () {
     if (terkirim || !video.videoWidth) return;
     var tJepret = Math.round(performance.now());
-    var w = video.videoWidth, h = video.videoHeight, lebar = Math.min(960, w), tinggi = Math.round(h * lebar / w);
+    var w = video.videoWidth, h = video.videoHeight, lebar = Math.min(640, w), tinggi = Math.round(h * lebar / w);
     var c = document.createElement('canvas'); c.width = lebar; c.height = tinggi;
     c.getContext('2d').drawImage(video, 0, 0, lebar, tinggi);
     var foto = c.toDataURL('image/jpeg', 0.82);
@@ -103,7 +122,7 @@
     if (ok) { $('pesan').textContent = 'Foto terkirim ke aplikasi ✓'; tutup(); }
     else {
       $('pesan').textContent = uji ? 'Foto berhasil diambil ✓ (mode uji — tidak dikirim ke mana pun)' : 'Foto belum dapat dikembalikan ke aplikasi. Silakan tutup halaman ini dan absen seperti biasa.';
-      info('Mode uji v2 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
+      info('Mode uji v3 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
     }
   });
 
