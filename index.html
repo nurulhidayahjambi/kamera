@@ -34,6 +34,18 @@
   #tunggu b { font-size:17px; }
   #tunggu small { opacity:.8; min-height:1.4em; }
   #alih { display:none; background:#fff; color:#111; padding:10px 16px; font-weight:600; }
+  /* v5 (23 Nov: izin kamera belum diberikan → dulu halaman langsung tertutup & aplikasi memakai kamera HP sepanjang hari):
+     langkah mengizinkan kamera tampil di halaman ini juga, tepat di bawah ikon gembok yang harus diketuk */
+  #izin { display:none; position:absolute; inset:0; overflow:auto; background:#0f1512; padding:max(18px,env(safe-area-inset-top)) 20px 20px; }
+  #izin.tampil { display:block; }
+  #izin .panah { font-size:28px; line-height:1; margin:0 0 6px 2px; }
+  #izin h1 { font-size:19px; margin:0 0 10px; }
+  #izin ol { margin:0 0 14px; padding-left:22px; }
+  #izin li { margin:0 0 8px; }
+  #izin p { margin:0 0 14px; opacity:.9; font-size:15px; }
+  #izin .tbl { display:block; width:100%; padding:14px 16px; margin:0 0 10px; font-weight:700; }
+  #cobaLagi { background:#fff; color:#111; }
+  #pakaiHP { background:transparent; color:var(--teks); box-shadow:inset 0 0 0 2px rgba(255,255,255,.5); }
 </style>
 </head>
 <body>
@@ -45,6 +57,19 @@
     <div id="tunggu"><div id="putar" aria-hidden="true"></div><b>Menyalakan kamera depan…</b><small id="tungguKet"></small><button id="alih" type="button">Pakai kamera HP saja</button></div>
     <div id="pesan">Menyalakan kamera depan…</div>
     <div id="info"></div>
+    <div id="izin" role="dialog" aria-labelledby="izinJudul">
+      <div class="panah" aria-hidden="true">↖</div>
+      <h1 id="izinJudul">Kamera belum diizinkan untuk halaman ini</h1>
+      <p id="izinKet">Cukup sekali. Sesudah diizinkan, kamera depan langsung terbuka setiap absen.</p>
+      <ol id="izinLangkah">
+        <li>Ketuk ikon <b>gembok</b> (atau ikon pengaturan) di <b>kiri alamat</b> di atas.</li>
+        <li>Pilih <b>Izin</b> (atau <b>Setelan situs</b>) → <b>Kamera</b> → <b>Izinkan</b>.</li>
+        <li>Ketuk <b>Coba lagi</b> di bawah ini.</li>
+      </ol>
+      <button id="cobaLagi" class="tbl" type="button">Coba lagi</button>
+      <p><small>Bila Kamera sudah <b>Izinkan</b> tetapi kamera tetap tidak menyala: Pengaturan HP → Aplikasi → <b>Chrome</b> → Izin → <b>Kamera: Izinkan</b>, lalu Coba lagi.</small></p>
+      <button id="pakaiHP" class="tbl" type="button">Pakai kamera HP saja hari ini</button>
+    </div>
   </div>
   <div id="bawah">
     <button id="batal" type="button">Batal</button>
@@ -79,6 +104,28 @@
     if (!uji && kirim({ galat: kode })) tutup(); // aplikasi langsung beralih ke kamera HP
   }
 
+  // v5: izin kamera belum diberikan → halaman TIDAK langsung tertutup. Langkahnya tampil di sini (gembok ada di alamat halaman ini),
+  // lalu "Coba lagi" memuat ulang halaman (id & asal tetap di alamat #, jendela tetap milik aplikasi). "Pakai kamera HP saja" →
+  // aplikasi memakai kamera HP hari itu, seperti sebelumnya. Bila izin berubah menjadi "diizinkan", halaman mencoba sendiri.
+  function tampilIzin() {
+    clearInterval(tTunggu); $('tunggu').classList.add('hilang'); $('pesan').textContent = ''; $('jepret').disabled = true; $('jepret').style.visibility = 'hidden';
+    $('izin').classList.add('tampil');
+    if (uji) $('pakaiHP').style.display = 'none';
+    info('Mode uji v5 · izin kamera belum diberikan');
+    try {
+      navigator.permissions.query({ name: 'camera' }).then(function (st) {
+        // "prompt" = belum pernah ditolak permanen (mis. jendela izin tertutup): cukup Coba lagi lalu Izinkan
+        // langkah gembok hanya perlu bila izin sudah ditolak ("denied"); bila Chrome masih dapat bertanya, cukup Coba lagi → Izinkan
+        if (st.state === 'prompt') { $('izinKet').textContent = 'Ketuk Coba lagi, lalu pilih Izinkan saat Chrome bertanya. Cukup sekali.'; $('izinLangkah').style.display = 'none'; }
+        st.onchange = function () { if (st.state === 'granted') cobaLagi(); };
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  // izin=1 di alamat: foto berikutnya ditandai "sesudah mengizinkan kamera" — aplikasi tidak memasukkan lamanya ke kecepatan kamera
+  function cobaLagi() { matikan(); try { if (!/(^|&)izin=1(&|$)/.test(location.hash.replace(/^#/, ''))) location.hash = location.hash.replace(/^#/, '') + '&izin=1'; location.reload(); } catch (e) {} }
+  $('cobaLagi').addEventListener('click', cobaLagi);
+  $('pakaiHP').addEventListener('click', function () { if (kirim({ galat: 'izin' })) tutup(); });
+
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { gagal('tidak_didukung', 'Peramban ini belum mendukung kamera langsung.'); return; }
 
   // v3: hitungan waktu & jalan keluar bila kamera HP lama menyala (HP dengan memori terbatas)
@@ -99,17 +146,17 @@
       clearInterval(tTunggu); $('tunggu').classList.add('hilang');
       $('pesan').textContent = 'Posisikan wajah di dalam oval, lalu ketuk tombol putih — atau ketuk di mana saja pada layar';
       $('jepret').disabled = false;
-      info('Mode uji v4 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
+      info('Mode uji v5 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
     })
     .catch(function (e) {
       var n = e && e.name;
-      if (n === 'NotAllowedError' || n === 'SecurityError') gagal('izin', 'Izin kamera belum diberikan. Ketuk ikon gembok di alamat, izinkan Kamera, lalu coba lagi.');
+      if (n === 'NotAllowedError' || n === 'SecurityError') tampilIzin();
       else if (n === 'NotFoundError' || n === 'OverconstrainedError') gagal('tidak_ada', 'Kamera depan tidak ditemukan.');
       else gagal('lain', 'Kamera belum dapat dinyalakan (' + (n || 'galat') + ').');
     });
 
   // v4 (produksi 20 Nov: "memotret" rata-rata 12 dtk): seluruh gambar kamera juga menjadi tombol potret
-  $('bingkai').addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#tunggu')) return; if (!$('jepret').disabled) $('jepret').click(); });
+  $('bingkai').addEventListener('click', function (e) { if (e.target.closest && (e.target.closest('#tunggu') || e.target.closest('#izin'))) return; if (!$('jepret').disabled) $('jepret').click(); });
   $('jepret').addEventListener('click', function () {
     if (terkirim || !video.videoWidth) return;
     var tJepret = Math.round(performance.now());
@@ -120,11 +167,11 @@
     $('hasil').src = foto; $('hasil').style.display = 'block'; video.style.display = 'none';
     matikan();
     terkirim = true;
-    var ok = kirim({ foto: foto, lebar: lebar, tinggi: tinggi, ms: { muat: tMuat, kamera: tKamera, jepret: tJepret, kirim: Math.round(performance.now()) }, mulai: t0 });
+    var ok = kirim({ foto: foto, lebar: lebar, tinggi: tinggi, izin: q.izin === '1' ? 1 : 0, ms: { muat: tMuat, kamera: tKamera, jepret: tJepret, kirim: Math.round(performance.now()) }, mulai: t0 });
     if (ok) { $('pesan').textContent = 'Foto terkirim ke aplikasi ✓'; tutup(); }
     else {
       $('pesan').textContent = uji ? 'Foto berhasil diambil ✓ (mode uji — tidak dikirim ke mana pun)' : 'Foto belum dapat dikembalikan ke aplikasi. Silakan tutup halaman ini dan absen seperti biasa.';
-      info('Mode uji v4 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
+      info('Mode uji v5 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
     }
   });
 
