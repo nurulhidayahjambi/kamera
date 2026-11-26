@@ -97,7 +97,10 @@
     try { pembuka.postMessage(isi, asal); return true; } catch (e) { return false; }
   }
   function matikan() { if (aliran) { aliran.getTracks().forEach(function (t) { t.stop(); }); aliran = null; } }
-  function tutup() { matikan(); setTimeout(function () { window.close(); }, 60); }
+  // v5.2: sebelum menutup, minta Chrome kembali ke tab aplikasi (tab pembuka). Tanpa ini, Chrome Android kadang memilih tab lain
+  // (banyak tab terbuka / tab aplikasi sempat ditidurkan). Dipanggil sesaat sesudah ketukan memotret, sehingga Chrome mengizinkannya.
+  function kembaliKeAplikasi() { try { if (pembuka && !pembuka.closed) pembuka.focus(); } catch (e) {} }
+  function tutup() { matikan(); kembaliKeAplikasi(); setTimeout(function () { kembaliKeAplikasi(); window.close(); }, 60); }
   function info(t) { if (uji) $('info').textContent = t; }
 
   function gagal(kode, teks) {
@@ -113,7 +116,7 @@
     clearInterval(tTunggu); $('tunggu').classList.add('hilang'); $('pesan').textContent = ''; $('jepret').disabled = true; $('jepret').style.visibility = 'hidden';
     $('izin').classList.add('tampil');
     if (uji) $('pakaiHP').style.display = 'none';
-    info('Mode uji v5.1 · izin kamera belum diberikan');
+    info('Mode uji v5.2 · izin kamera belum diberikan');
     try {
       navigator.permissions.query({ name: 'camera' }).then(function (st) {
         // "prompt" = belum pernah ditolak permanen (mis. jendela izin tertutup): cukup Coba lagi lalu Izinkan
@@ -148,7 +151,7 @@
       clearInterval(tTunggu); $('tunggu').classList.add('hilang');
       $('pesan').textContent = 'Posisikan wajah di dalam oval, lalu ketuk tombol putih — atau ketuk di mana saja pada layar';
       $('jepret').disabled = false;
-      info('Mode uji v5.1 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
+      info('Mode uji v5.2 · dibuka dari aplikasi: ' + (pembuka ? 'ya' : 'tidak') + ' · asal sah: ' + (asal ? 'ya' : 'tidak') + '\nHalaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum'));
     })
     .catch(function (e) {
       var n = e && e.name;
@@ -173,7 +176,7 @@
     if (ok) { $('pesan').textContent = 'Foto terkirim ke aplikasi ✓'; tutup(); }
     else {
       $('pesan').textContent = uji ? 'Foto berhasil diambil ✓ (mode uji — tidak dikirim ke mana pun)' : 'Foto belum dapat dikembalikan ke aplikasi. Silakan tutup halaman ini dan absen seperti biasa.';
-      info('Mode uji v5.1 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
+      info('Mode uji v5.2 · halaman siap ' + tMuat + ' ms · kamera menyala ' + (tKamera - tMuat) + ' ms sesudahnya · total ' + tKamera + ' ms · tersimpan di HP: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ya' : 'belum') + ' · ukuran foto ' + Math.round(foto.length * 0.75 / 1024) + ' KB (' + lebar + '×' + tinggi + ')');
     }
   });
 
